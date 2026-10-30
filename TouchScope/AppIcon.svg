@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">TouchScope</title>
+  <desc id="desc">A trackpad with a touch point and a pointer cursor.</desc>
+  <defs>
+    <linearGradient id="bg" x1="128" y1="96" x2="896" y2="928" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#252A40"/>
+      <stop offset="1" stop-color="#0B0D14"/>
+    </linearGradient>
+    <linearGradient id="pad" x1="512" y1="270" x2="512" y2="754" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.02"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="371" y1="486" x2="439" y2="554" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7DEBFF"/>
+      <stop offset="1" stop-color="#2F80ED"/>
+    </linearGradient>
+    <linearGradient id="cursor" x1="560" y1="390" x2="720" y2="660" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DCEBFF"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(620 500) rotate(90) scale(230)">
+      <stop offset="0" stop-color="#5AC8FA" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#5AC8FA" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect x="64" y="64" width="896" height="896" rx="200" fill="url(#bg)"/>
+  <rect x="65" y="65" width="894" height="894" rx="199" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="2"/>
+  <circle cx="620" cy="500" r="230" fill="url(#glow)"/>
+
+  <rect x="212" y="270" width="600" height="484" rx="92" fill="url(#pad)" stroke="#F5F7FF" stroke-opacity="0.92" stroke-width="24"/>
+  <circle cx="405" cy="520" r="78" fill="none" stroke="url(#accent)" stroke-opacity="0.32" stroke-width="16"/>
+  <circle cx="405" cy="520" r="34" fill="url(#accent)"/>
+
+  <path d="M 0 0 L 0 236 L 64 176 L 108 274 L 152 254 L 108 160 L 192 160 Z" transform="translate(557 402)" fill="#000000" opacity="0.38"/>
+  <path d="M 0 0 L 0 236 L 64 176 L 108 274 L 152 254 L 108 160 L 192 160 Z" transform="translate(545 390)" fill="url(#cursor)" stroke="#0B0D14" stroke-width="12" stroke-linejoin="round"/>
+</svg>

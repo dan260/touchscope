@@ -1,0 +1,11 @@
+.DS_Store
+**/.build/
+.build/
+.swiftpm/
+DerivedData/
+*.app
+*.dSYM
+*.log
+
+/ts_crop.png
+/ts_view.png
