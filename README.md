@@ -16,7 +16,7 @@ It is not a touchscreen emulator and not Direct Touch. The app reads multitouch 
 - Native physical clicks and tap-to-click, with no synthetic click events.
 - Drag with a 5 pt threshold: a slight movement while pressed stays a click; a deliberate movement becomes a drag.
 - Motion smoothing, a sticky retouch zone, and jitter protection.
-- Edge snapping for easier access to the Dock and menu bar.
+- Hardware-like mouse deltas for reliable tracking and Dock interaction.
 - Toggle CG mouse with a three-finger double-tap.
 - Menu bar-only: no Dock icon and no window.
 - Local log at `~/touchscope.log`; no network access or telemetry.

@@ -29,16 +29,11 @@ final class CGMouseController: @unchecked Sendable {
     private var dragAnchor: CGPoint?
     private var isDragging = false
     private var buttonTimer: Timer?
-    private var snapLeft = false
-    private var snapRight = false
-    private var snapTop = false
-    private var snapBottom = false
+    private let eventSource = CGEventSource(stateID: .hidSystemState)
 
     private let smoothingFactor: CGFloat = 0.35
     private let retouchStickyRadius: CGFloat = 0.012
     private let clickDragThreshold: CGFloat = 5
-    private let edgeSnapEnter: CGFloat = 0.05
-    private let edgeSnapExit: CGFloat = 0.08
 
     @discardableResult
     func activate() -> Bool {
@@ -72,10 +67,6 @@ final class CGMouseController: @unchecked Sendable {
         hasLastNormalized = false
         dragAnchor = nil
         isDragging = false
-        snapLeft = false
-        snapRight = false
-        snapTop = false
-        snapBottom = false
         buttonTimer?.invalidate()
         buttonTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             self?.pollButton()
@@ -89,10 +80,6 @@ final class CGMouseController: @unchecked Sendable {
         activeTouch = false
         dragAnchor = nil
         isDragging = false
-        snapLeft = false
-        snapRight = false
-        snapTop = false
-        snapBottom = false
         buttonTimer?.invalidate()
         buttonTimer = nil
         let err = CGAssociateMouseAndMouseCursorPosition(1)
@@ -106,16 +93,13 @@ final class CGMouseController: @unchecked Sendable {
 
     func handle(multitouchFingerID: Int32, normalized: CGPoint, down: Bool) {
         guard isEnabled else { return }
-        let edge = edgeAdjusted(normalized)
-        let mapped = map(edge.point)
+        let mapped = map(normalized)
 
         if down {
             if !activeTouch {
                 let point: CGPoint
-                if edge.snapped {
-                    point = mapped
-                } else if hasSmoothedPoint, hasLastNormalized,
-                          hypot(normalized.x - lastNormalized.x, normalized.y - lastNormalized.y) < retouchStickyRadius {
+                if hasSmoothedPoint, hasLastNormalized,
+                   hypot(normalized.x - lastNormalized.x, normalized.y - lastNormalized.y) < retouchStickyRadius {
                     point = lastPoint
                 } else {
                     point = mapped
@@ -128,71 +112,21 @@ final class CGMouseController: @unchecked Sendable {
                 hasLastNormalized = true
                 postMove(point)
             } else {
-                let point = resolvedPoint(mapped, snapped: edge.snapped)
+                let point = smoothed(mapped)
                 lastPoint = point
                 lastNormalized = normalized
                 hasLastNormalized = true
                 postMove(point)
             }
         } else if activeTouch {
-            let point = resolvedPoint(mapped, snapped: edge.snapped)
+            let point = map(normalized)
             lastPoint = point
+            smoothedPoint = point
             lastNormalized = normalized
             hasLastNormalized = true
             postMove(point)
             activeTouch = false
         }
-    }
-
-    private func edgeAdjusted(_ normalized: CGPoint) -> (point: CGPoint, snapped: Bool) {
-        var x = normalized.x
-        var y = normalized.y
-
-        if x <= edgeSnapEnter {
-            snapLeft = true
-        } else if x >= edgeSnapExit {
-            snapLeft = false
-        }
-
-        if x >= 1 - edgeSnapEnter {
-            snapRight = true
-        } else if x <= 1 - edgeSnapExit {
-            snapRight = false
-        }
-
-        if y <= edgeSnapEnter {
-            snapBottom = true
-        } else if y >= edgeSnapExit {
-            snapBottom = false
-        }
-
-        if y >= 1 - edgeSnapEnter {
-            snapTop = true
-        } else if y <= 1 - edgeSnapExit {
-            snapTop = false
-        }
-
-        if snapLeft {
-            x = 0
-        } else if snapRight {
-            x = 1
-        }
-
-        if snapBottom {
-            y = 0
-        } else if snapTop {
-            y = 1
-        }
-
-        return (CGPoint(x: x, y: y), snapLeft || snapRight || snapTop || snapBottom)
-    }
-
-    private func resolvedPoint(_ mapped: CGPoint, snapped: Bool) -> CGPoint {
-        if snapped {
-            smoothedPoint = mapped
-            return mapped
-        }
-        return smoothed(mapped)
     }
 
     private func smoothed(_ target: CGPoint) -> CGPoint {
@@ -243,12 +177,16 @@ final class CGMouseController: @unchecked Sendable {
 
     @discardableResult
     private func post(_ type: CGEventType, at p: CGPoint) -> Bool {
-        guard let e = CGEvent(mouseEventSource: nil, mouseType: type,
+        guard let e = CGEvent(mouseEventSource: eventSource, mouseType: type,
                               mouseCursorPosition: p, mouseButton: .left) else {
             log("CGEvent creation failed (type \(type.rawValue))")
             return false
         }
-        e.setIntegerValueField(.mouseEventClickState, value: 1)
+        let dx = p.x - lastPostedPoint.x
+        let dy = p.y - lastPostedPoint.y
+        e.setIntegerValueField(.mouseEventDeltaX, value: Int64(dx.rounded()))
+        e.setIntegerValueField(.mouseEventDeltaY, value: Int64(dy.rounded()))
+        e.setIntegerValueField(.mouseEventClickState, value: type == .leftMouseDragged ? 1 : 0)
         e.post(tap: .cghidEventTap)
         return true
     }
