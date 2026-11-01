@@ -54,6 +54,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
     private var isRunningFn: IsRunningFn?
 
     private var pointerActive = false
+    private var pointerSuppressed = false
     private var lastPoint: CGPoint = .zero
     private var releaseWork: DispatchWorkItem?
 
@@ -142,6 +143,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
 
         isRunning = true
         pointerActive = false
+        pointerSuppressed = false
         releaseWork?.cancel()
         releaseWork = nil
         pendingPointerWork?.cancel()
@@ -165,6 +167,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
         device = nil
         deviceList = nil
         pointerActive = false
+        pointerSuppressed = false
         releaseWork?.cancel()
         releaseWork = nil
         pendingPointerWork?.cancel()
@@ -178,6 +181,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
 
     func cancelPointer() {
         pointerActive = false
+        pointerSuppressed = false
         releaseWork?.cancel()
         releaseWork = nil
         pendingPointerWork?.cancel()
@@ -199,6 +203,16 @@ final class MultitouchTouchSource: @unchecked Sendable {
         if onTouch == nil {
             cancelPointer()
         }
+
+        if current.isEmpty {
+            pointerSuppressed = false
+        } else if current.count >= 2 {
+            if pointerActive {
+                releasePointer()
+            }
+            pointerSuppressed = true
+        }
+
         updateThreeFingerGesture(current, present: present)
 
         if gestureActive {
@@ -211,14 +225,14 @@ final class MultitouchTouchSource: @unchecked Sendable {
             return
         }
 
-        if current.isEmpty {
+        if pointerSuppressed {
             cancelPendingPointerStart()
-            scheduleRelease()
             return
         }
 
-        if !pointerActive, current.count >= 2 {
+        if current.isEmpty {
             cancelPendingPointerStart()
+            scheduleRelease()
             return
         }
 
@@ -235,6 +249,14 @@ final class MultitouchTouchSource: @unchecked Sendable {
         let point = CGPoint(x: chosen.x, y: chosen.y)
         lastPoint = point
         onTouch?(0, point, true)
+    }
+
+    private func releasePointer() {
+        guard pointerActive else { return }
+        pointerActive = false
+        releaseWork?.cancel()
+        releaseWork = nil
+        onTouch?(0, lastPoint, false)
     }
 
     private func schedulePointerStart(_ chosen: MTFinger) {
