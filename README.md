@@ -8,7 +8,7 @@ TouchScope is a macOS menu bar utility that turns the built-in MacBook trackpad 
 
 It is not a touchscreen emulator and not Direct Touch. The app reads multitouch data through the private `MultitouchSupport.framework` and moves the system cursor with `CGEvent`. Physical clicks, tap-to-click, and drag remain native macOS behavior.
 
-> Status: prototype `0.2.0`. Uses a private API and ad-hoc signing. Not intended for the Mac App Store; macOS updates may break it.
+> Status: prototype `0.3.0`. Uses a private API and ad-hoc signing. Not intended for the Mac App Store; macOS updates may break it.
 
 ## Features
 
@@ -18,6 +18,7 @@ It is not a touchscreen emulator and not Direct Touch. The app reads multitouch 
 - Motion smoothing, a sticky retouch zone, and jitter protection.
 - Hardware-like mouse deltas for reliable tracking and Dock interaction.
 - Toggle CG mouse with a three-finger double-tap.
+- Window mode: lock the pointer to the window under the cursor and outline that window with a configurable color (⌃⌥W, or a two-finger tap followed by a three-finger tap). Switching apps with ⌘Tab moves the lock to the newly active window.
 - Settings window with **General** and **Pointer** tabs: launch behavior, gesture toggle, smoothing, sticky zone, drag threshold, and diagnostics.
 - Menu bar-only: no Dock icon; settings open in a compact window.
 - Local log at `~/touchscope.log`; no network access or telemetry.
@@ -74,7 +75,8 @@ If the menu shows **Accessibility: Granted**, permission is already granted. If 
 
 - **CG mouse** — enable or disable absolute cursor control.
 - **3-finger double-tap toggles CG mouse** — two quick three-finger taps toggle the mode; this works even when CG mouse is off.
-- **Settings…** — open the settings window. **General** covers launch behavior, the three-finger gesture, Accessibility, and the log; **Pointer** covers smoothing, the sticky retouch zone, and the drag threshold.
+- **Lock to Window (⌃⌥W or two-finger tap then three-finger tap)** — lock the cursor to the window under the pointer and outline it. While locked, ⌘Tab retargets the outline and the cursor to the newly active window. Repeat either activation to unlock. If CG mouse is off, this also enables it.
+- **Settings…** — open the settings window. **General** covers launch behavior, the three-finger gesture, window outline color, Accessibility, and the log; **Pointer** covers smoothing, the sticky retouch zone, and the drag threshold.
 - **Accessibility** — permission status and a shortcut to System Settings.
 - **Quit TouchScope** — shut down cleanly and restore the hardware cursor.
 
@@ -87,6 +89,14 @@ While active:
 - Release the finger at the target position to finish the drag.
 
 The screen is selected when CG mouse is enabled: the display under the cursor is used. When switching displays, turn CG mouse off and on again.
+
+### Window mode
+
+- Activate with **⌃⌥W** or by tapping **two fingers, then three fingers**.
+- The window under the pointer is outlined, and trackpad coordinates map to that window instead of the whole screen.
+- Pressing **⌘Tab** retargets the mode to the newly active app window; the cursor is moved into the new window when needed.
+- The outline color is configurable in **Settings… → General → Window mode**.
+- Desktop, Dock, and menu bar are not treated as windows. If no window is under the pointer, activation beeps and does nothing.
 
 ## How it works
 
@@ -106,7 +116,9 @@ CGEvent → WindowServer → frontmost application
 - `CGMouseController` maps normalized trackpad coordinates to screen coordinates, disassociates the hardware cursor with `CGAssociateMouseAndMouseCursorPosition(0)`, and posts `mouseMoved` / `leftMouseDragged` events.
 - Physical button state is read with `CGEventSource.buttonState`, so clicks and drag remain system-native; the app only helps position the cursor.
 - `main.swift` creates the menu bar item and connects the trackpad to the cursor controller.
-- `SettingsStore.swift` persists pointer and gesture settings in `UserDefaults`.
+- `WindowLockController.swift` finds the window under the pointer, tracks its bounds, and draws the colored outline; `CGMouseController` maps touches to that window instead of the whole screen.
+- `GlobalHotKey.swift` registers the global ⌃⌥W shortcut with Carbon.
+- `SettingsStore.swift` persists pointer, gesture, and window-outline settings in `UserDefaults`.
 - `SettingsWindowController.swift` hosts the SwiftUI settings tabs.
 - `Log.swift` writes a minimal log to `~/touchscope.log`.
 
@@ -116,7 +128,8 @@ CGEvent → WindowServer → frontmost application
 - **Accessibility.** CG mouse will not start without permission. Ad-hoc signing is tied to TCC, so the permission may reset after each rebuild; grant it again.
 - **Force-kill.** Killing the process without a clean shutdown may leave the hardware cursor disassociated until the next login. Quit through **Quit TouchScope**.
 - **Not Direct Touch.** The app does not deliver `NSTouch` to other applications and does not create a virtual touchscreen. A real touchscreen requires the `com.apple.developer.hid.virtual.device` entitlement, which is not available in ordinary provisioning profiles.
-- **No pressure, hotkey, or area editor.** Pointer tuning is available in **Settings…**; there is still no per-app configuration or custom gesture editor.
+- **Fixed window-mode shortcut.** ⌃⌥W is built in; there is no shortcut editor. Pointer tuning is available in **Settings…**, but there is still no per-app configuration or custom gesture editor.
+- **No pressure or area editor.** Pressure is not exposed, and there is no trackpad area editor.
 - **No notarization.** When moved to another Mac, Gatekeeper may require opening the app via the context menu → **Open**.
 
 ## Project layout
@@ -135,6 +148,9 @@ CGEvent → WindowServer → frontmost application
         ├── main.swift
         ├── MultitouchTouchSource.swift
         ├── CGMouseController.swift
+        ├── WindowLockController.swift
+        ├── GlobalHotKey.swift
+        ├── ColorHex.swift
         ├── SettingsStore.swift
         ├── SettingsWindowController.swift
         └── Log.swift

@@ -29,6 +29,7 @@ final class CGMouseController: @unchecked Sendable {
     private var dragAnchor: CGPoint?
     private var isDragging = false
     private var buttonTimer: Timer?
+    private var lockedWindowBounds: CGRect?
     private let eventSource = CGEventSource(stateID: .hidSystemState)
 
     private var smoothingFactor: CGFloat { CGFloat(SettingsStore.shared.smoothingFactor) }
@@ -63,6 +64,7 @@ final class CGMouseController: @unchecked Sendable {
 
         isEnabled = true
         activeTouch = false
+        lockedWindowBounds = nil
         hasSmoothedPoint = false
         hasLastNormalized = false
         dragAnchor = nil
@@ -75,9 +77,22 @@ final class CGMouseController: @unchecked Sendable {
         return true
     }
 
+    func setLockedWindowBounds(_ bounds: CGRect?) {
+        lockedWindowBounds = bounds
+    }
+
+    func warp(to point: CGPoint) {
+        guard isEnabled else { return }
+        smoothedPoint = point
+        lastPoint = point
+        hasSmoothedPoint = true
+        postMove(point)
+    }
+
     func deactivate() {
         guard isEnabled else { return }
         activeTouch = false
+        lockedWindowBounds = nil
         dragAnchor = nil
         isDragging = false
         buttonTimer?.invalidate()
@@ -140,6 +155,16 @@ final class CGMouseController: @unchecked Sendable {
     private func map(_ n: CGPoint) -> CGPoint {
         let x = max(0, min(1, n.x))
         let y = max(0, min(1, n.y))
+
+        if let window = lockedWindowBounds {
+            let cgX = window.minX + x * window.width
+            let cgY = window.maxY - y * window.height
+            return CGPoint(
+                x: max(window.minX, min(window.maxX - 1, cgX)),
+                y: max(window.minY, min(window.maxY - 1, cgY))
+            )
+        }
+
         let cgX = screenFrame.minX + x * screenFrame.width
         let cgY = mainScreenMaxY - (screenFrame.minY + y * screenFrame.height)
         return CGPoint(

@@ -8,9 +8,13 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var mtItem: NSMenuItem!
     private var accessItem: NSMenuItem!
     private var gestureItem: NSMenuItem!
+    private var windowItem: NSMenuItem!
     private let cgMouse = CGMouseController()
     private let mtTouch = MultitouchTouchSource()
+    private let windowLock = WindowLockController()
+    private let windowHotKey = GlobalHotKey()
     private lazy var settingsWindow = SettingsWindowController()
+    private var retargetTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -29,6 +33,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         cgItem.target = self
         cgItem.isEnabled = true
         menu.addItem(cgItem)
+
+        windowItem = NSMenuItem(title: "Lock to Window (⌃⌥W or 2+3 tap)", action: #selector(toggleWindowLock), keyEquivalent: "")
+        windowItem.target = self
+        menu.addItem(windowItem)
 
         mtItem = NSMenuItem(title: "Global trackpad", action: nil, keyEquivalent: "")
         mtItem.isEnabled = false
@@ -64,6 +72,29 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.setCGMouse(!self.cgMouse.isEnabled)
             }
         }
+        mtTouch.onTwoThenThreeFingerTap = { [weak self] in
+            Task { @MainActor in
+                self?.toggleWindowLock()
+            }
+        }
+
+        windowLock.onTargetChanged = { [weak self] bounds in
+            self?.cgMouse.setLockedWindowBounds(bounds)
+            self?.refreshStatus()
+        }
+        windowLock.onTargetLost = { [weak self] reason in
+            Log.write("[WL] \(reason)")
+            self?.refreshStatus()
+        }
+        windowHotKey.onPress = { [weak self] in
+            self?.toggleWindowLock()
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(applicationDidActivate(_:)),
+            name: NSWorkspace.didActivateApplicationNotification,
+            object: nil
+        )
 
         Log.write("Accessibility trusted: \(AXIsProcessTrusted())")
         if mtTouch.start() {
@@ -78,6 +109,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        retargetTask?.cancel()
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+        windowLock.unlock()
         mtTouch.stop()
         cgMouse.deactivate()
     }
@@ -88,6 +122,36 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func toggleCGMouse() {
         setCGMouse(!cgMouse.isEnabled)
+    }
+
+    @objc private func applicationDidActivate(_ notification: Notification) {
+        guard windowLock.isActive,
+              let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              app.processIdentifier != getpid() else {
+            return
+        }
+
+        let pid = app.processIdentifier
+        retargetTask?.cancel()
+        retargetTask = Task { @MainActor [weak self] in
+            for delay in [120, 250, 400, 700] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                guard !Task.isCancelled, let self, self.windowLock.isActive else { return }
+                if self.windowLock.switchToFrontmostWindow(ofPID: pid) {
+                    self.centerCursorIfNeeded(in: self.windowLock.target?.bounds)
+                    Log.write("[WL] switched to window of pid \(pid)")
+                    return
+                }
+            }
+            Log.write("[WL] no window found for newly active pid \(pid)")
+        }
+    }
+
+    private func centerCursorIfNeeded(in bounds: CGRect?) {
+        guard let bounds else { return }
+        let cursor = CGEvent(source: nil)?.location ?? .zero
+        guard !bounds.contains(cursor) else { return }
+        cgMouse.warp(to: CGPoint(x: bounds.midX, y: bounds.midY))
     }
 
     private func setCGMouse(_ on: Bool) {
@@ -111,9 +175,34 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return
             }
         } else {
+            windowLock.unlock()
             mtTouch.onTouch = nil
             mtTouch.cancelPointer()
             cgMouse.deactivate()
+        }
+        refreshStatus()
+    }
+
+    @objc private func toggleWindowLock() {
+        if windowLock.isActive {
+            windowLock.unlock()
+            refreshStatus()
+            return
+        }
+
+        if !cgMouse.isEnabled {
+            setCGMouse(true)
+            guard cgMouse.isEnabled else { return }
+        }
+
+        guard let cursor = CGEvent(source: nil)?.location else {
+            Log.write("[WL] cursor location unavailable")
+            return
+        }
+
+        if !windowLock.lock(at: cursor) {
+            Log.write("[WL] no window under cursor")
+            NSSound.beep()
         }
         refreshStatus()
     }
@@ -125,6 +214,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         gestureItem?.title = SettingsStore.shared.threeFingerDoubleTap
             ? "3-finger double-tap: On"
             : "3-finger double-tap: Off"
+        windowItem?.state = windowLock.isActive ? .on : .off
+        windowItem?.title = windowLock.isActive
+            ? "Window Mode: On (⌃⌥W or 2+3 tap)"
+            : "Lock to Window (⌃⌥W or 2+3 tap)"
 
         let trusted = AXIsProcessTrusted()
         accessItem?.title = trusted ? "Accessibility: Granted" : "Grant Accessibility…"

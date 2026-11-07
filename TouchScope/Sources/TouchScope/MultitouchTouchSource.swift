@@ -43,6 +43,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
     var logHandler: ((String) -> Void)?
     var onTouch: ((Int32, CGPoint, Bool) -> Void)?
     var onThreeFingerDoubleTap: (() -> Void)?
+    var onTwoThenThreeFingerTap: (() -> Void)?
 
     private(set) var isRunning = false
 
@@ -68,6 +69,13 @@ final class MultitouchTouchSource: @unchecked Sendable {
     private var threeFingerStartCentroid: CGPoint = .zero
     private var threeFingerMaxMovement: Double = 0
     private var lastThreeFingerTap: CFTimeInterval = 0
+
+    private var twoFingerActive = false
+    private var twoFingerEvaluated = false
+    private var twoFingerStart: CFTimeInterval = 0
+    private var twoFingerStartCentroid: CGPoint = .zero
+    private var twoFingerMaxMovement: Double = 0
+    private var lastTwoFingerTap: CFTimeInterval = 0
 
     deinit {
         stop()
@@ -152,6 +160,9 @@ final class MultitouchTouchSource: @unchecked Sendable {
         gestureActive = false
         gestureEvaluated = false
         lastThreeFingerTap = 0
+        twoFingerActive = false
+        twoFingerEvaluated = false
+        lastTwoFingerTap = 0
         log("started")
         return true
     }
@@ -176,6 +187,9 @@ final class MultitouchTouchSource: @unchecked Sendable {
         gestureActive = false
         gestureEvaluated = false
         lastThreeFingerTap = 0
+        twoFingerActive = false
+        twoFingerEvaluated = false
+        lastTwoFingerTap = 0
         log("stopped")
     }
 
@@ -213,6 +227,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
             pointerSuppressed = true
         }
 
+        updateTwoFingerTap(current)
         updateThreeFingerGesture(current, present: present)
 
         if gestureActive {
@@ -287,6 +302,42 @@ final class MultitouchTouchSource: @unchecked Sendable {
         pendingContact = false
     }
 
+    private func updateTwoFingerTap(_ contacts: [MTFinger]) {
+        if twoFingerActive {
+            if contacts.count > 2 {
+                twoFingerActive = false
+                twoFingerEvaluated = false
+                return
+            }
+            if contacts.count == 2 {
+                let c = centroid(contacts)
+                twoFingerMaxMovement = max(twoFingerMaxMovement, distance(c, twoFingerStartCentroid))
+            } else if !twoFingerEvaluated {
+                twoFingerEvaluated = true
+                let now = CFAbsoluteTimeGetCurrent()
+                let duration = now - twoFingerStart
+                if duration < 0.5, twoFingerMaxMovement < 0.06 {
+                    lastTwoFingerTap = now
+                }
+            }
+            if contacts.isEmpty {
+                twoFingerActive = false
+                twoFingerEvaluated = false
+            }
+            return
+        }
+
+        guard !gestureActive else { return }
+
+        if contacts.count == 2 {
+            twoFingerActive = true
+            twoFingerEvaluated = false
+            twoFingerStart = CFAbsoluteTimeGetCurrent()
+            twoFingerStartCentroid = centroid(contacts)
+            twoFingerMaxMovement = 0
+        }
+    }
+
     private func updateThreeFingerGesture(_ contacts: [MTFinger], present: [MTFinger]) {
         guard !pointerActive else {
             gestureActive = false
@@ -307,8 +358,13 @@ final class MultitouchTouchSource: @unchecked Sendable {
                 let now = CFAbsoluteTimeGetCurrent()
                 let duration = now - threeFingerStart
                 if duration < 0.6, threeFingerMaxMovement < 0.06 {
-                    if now - lastThreeFingerTap < 1.5 {
+                    if now - lastTwoFingerTap < 1.0 {
+                        lastTwoFingerTap = 0
                         lastThreeFingerTap = 0
+                        onTwoThenThreeFingerTap?()
+                    } else if now - lastThreeFingerTap < 1.5 {
+                        lastThreeFingerTap = 0
+                        lastTwoFingerTap = 0
                         onThreeFingerDoubleTap?()
                     } else {
                         lastThreeFingerTap = now

@@ -19,6 +19,7 @@ struct SettingsView: View {
 private struct GeneralSettingsView: View {
     @AppStorage(SettingsKeys.startCGMouse) private var startCGMouse = SettingsDefaults.startCGMouse
     @AppStorage(SettingsKeys.threeFingerDoubleTap) private var threeFingerDoubleTap = SettingsDefaults.threeFingerDoubleTap
+    @AppStorage(SettingsKeys.windowOutlineColor) private var windowOutlineColorHex = SettingsDefaults.windowOutlineColor
     @State private var trusted = AXIsProcessTrusted()
 
     var body: some View {
@@ -32,6 +33,13 @@ private struct GeneralSettingsView: View {
 
             Section("Gestures") {
                 Toggle("Three-finger double-tap toggles CG mouse", isOn: $threeFingerDoubleTap)
+            }
+
+            Section("Window mode") {
+                ColorPicker("Window outline color", selection: windowOutlineColorBinding, supportsOpacity: false)
+                Text("Press ⌃⌥W, or tap two fingers and then three fingers, to lock the cursor to the window under the pointer. Repeat to unlock.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Permissions") {
@@ -76,7 +84,15 @@ private struct GeneralSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .touchScopeSettingsReset)) { _ in
             startCGMouse = SettingsDefaults.startCGMouse
             threeFingerDoubleTap = SettingsDefaults.threeFingerDoubleTap
+            windowOutlineColorHex = SettingsDefaults.windowOutlineColor
         }
+    }
+
+    private var windowOutlineColorBinding: Binding<Color> {
+        Binding(
+            get: { Color(nsColor: NSColor(hex: windowOutlineColorHex) ?? .systemBlue) },
+            set: { windowOutlineColorHex = NSColor($0).hexString }
+        )
     }
 
     private func openAccessibility() {

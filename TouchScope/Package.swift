@@ -10,6 +10,7 @@ let package = Package(
             path: "Sources/TouchScope",
             linkerSettings: [
                 .linkedFramework("CoreGraphics"),
+                .linkedFramework("Carbon"),
             ]
         )
     ]

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 extension Notification.Name {
@@ -10,6 +11,7 @@ enum SettingsKeys {
     static let dragThreshold = "dragThreshold"
     static let threeFingerDoubleTap = "threeFingerDoubleTap"
     static let startCGMouse = "startCGMouse"
+    static let windowOutlineColor = "windowOutlineColor"
 }
 
 enum SettingsDefaults {
@@ -18,6 +20,7 @@ enum SettingsDefaults {
     static let dragThreshold = 5.0
     static let threeFingerDoubleTap = true
     static let startCGMouse = false
+    static let windowOutlineColor = "#0A84FF"
 }
 
 final class SettingsStore: @unchecked Sendable {
@@ -50,6 +53,15 @@ final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: SettingsKeys.startCGMouse) }
     }
 
+    var windowOutlineColorHex: String {
+        get { defaults.string(forKey: SettingsKeys.windowOutlineColor) ?? SettingsDefaults.windowOutlineColor }
+        set { defaults.set(newValue, forKey: SettingsKeys.windowOutlineColor) }
+    }
+
+    var windowOutlineColor: NSColor {
+        NSColor(hex: windowOutlineColorHex) ?? .systemBlue
+    }
+
     func reset() {
         for key in [
             SettingsKeys.smoothingFactor,
@@ -57,6 +69,7 @@ final class SettingsStore: @unchecked Sendable {
             SettingsKeys.dragThreshold,
             SettingsKeys.threeFingerDoubleTap,
             SettingsKeys.startCGMouse,
+            SettingsKeys.windowOutlineColor,
         ] {
             defaults.removeObject(forKey: key)
         }
