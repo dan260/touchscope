@@ -18,7 +18,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Show toolchain
         run: |
@@ -38,7 +38,7 @@ jobs:
           (cd dist && shasum -a 256 "${ASSET}" > "${ASSET}.sha256")
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: TouchScope-${{ github.sha }}
           path: dist/*
