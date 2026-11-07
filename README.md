@@ -8,7 +8,7 @@ TouchScope is a macOS menu bar utility that turns the built-in MacBook trackpad 
 
 It is not a touchscreen emulator and not Direct Touch. The app reads multitouch data through the private `MultitouchSupport.framework` and moves the system cursor with `CGEvent`. Physical clicks, tap-to-click, and drag remain native macOS behavior.
 
-> Status: prototype `0.1.0`. Uses a private API and ad-hoc signing. Not intended for the Mac App Store; macOS updates may break it.
+> Status: prototype `0.2.0`. Uses a private API and ad-hoc signing. Not intended for the Mac App Store; macOS updates may break it.
 
 ## Features
 
@@ -18,7 +18,8 @@ It is not a touchscreen emulator and not Direct Touch. The app reads multitouch 
 - Motion smoothing, a sticky retouch zone, and jitter protection.
 - Hardware-like mouse deltas for reliable tracking and Dock interaction.
 - Toggle CG mouse with a three-finger double-tap.
-- Menu bar-only: no Dock icon and no window.
+- Settings window with **General** and **Pointer** tabs: launch behavior, gesture toggle, smoothing, sticky zone, drag threshold, and diagnostics.
+- Menu bar-only: no Dock icon; settings open in a compact window.
 - Local log at `~/touchscope.log`; no network access or telemetry.
 
 ## Requirements
@@ -65,6 +66,7 @@ open /Applications/TouchScope.app
 3. Enable TouchScope in **System Settings → Privacy & Security → Accessibility**.
 4. Return to the menu and enable **CG mouse**.
 5. Verify: a finger on the trackpad should move the cursor absolutely, and a physical click should click at the current position.
+6. Open **Settings…** from the menu to tune the pointer and gestures.
 
 If the menu shows **Accessibility: Granted**, permission is already granted. If it shows **Global trackpad: Unavailable**, the app could not connect to the built-in trackpad; check `~/touchscope.log`.
 
@@ -72,6 +74,7 @@ If the menu shows **Accessibility: Granted**, permission is already granted. If 
 
 - **CG mouse** — enable or disable absolute cursor control.
 - **3-finger double-tap toggles CG mouse** — two quick three-finger taps toggle the mode; this works even when CG mouse is off.
+- **Settings…** — open the settings window. **General** covers launch behavior, the three-finger gesture, Accessibility, and the log; **Pointer** covers smoothing, the sticky retouch zone, and the drag threshold.
 - **Accessibility** — permission status and a shortcut to System Settings.
 - **Quit TouchScope** — shut down cleanly and restore the hardware cursor.
 
@@ -103,6 +106,8 @@ CGEvent → WindowServer → frontmost application
 - `CGMouseController` maps normalized trackpad coordinates to screen coordinates, disassociates the hardware cursor with `CGAssociateMouseAndMouseCursorPosition(0)`, and posts `mouseMoved` / `leftMouseDragged` events.
 - Physical button state is read with `CGEventSource.buttonState`, so clicks and drag remain system-native; the app only helps position the cursor.
 - `main.swift` creates the menu bar item and connects the trackpad to the cursor controller.
+- `SettingsStore.swift` persists pointer and gesture settings in `UserDefaults`.
+- `SettingsWindowController.swift` hosts the SwiftUI settings tabs.
 - `Log.swift` writes a minimal log to `~/touchscope.log`.
 
 ## Limitations
@@ -111,7 +116,7 @@ CGEvent → WindowServer → frontmost application
 - **Accessibility.** CG mouse will not start without permission. Ad-hoc signing is tied to TCC, so the permission may reset after each rebuild; grant it again.
 - **Force-kill.** Killing the process without a clean shutdown may leave the hardware cursor disassociated until the next login. Quit through **Quit TouchScope**.
 - **Not Direct Touch.** The app does not deliver `NSTouch` to other applications and does not create a virtual touchscreen. A real touchscreen requires the `com.apple.developer.hid.virtual.device` entitlement, which is not available in ordinary provisioning profiles.
-- **No pressure, settings, hotkey, or area editor.** The click threshold is fixed at 5 pt, and the only gesture is the three-finger double-tap.
+- **No pressure, hotkey, or area editor.** Pointer tuning is available in **Settings…**; there is still no per-app configuration or custom gesture editor.
 - **No notarization.** When moved to another Mac, Gatekeeper may require opening the app via the context menu → **Open**.
 
 ## Project layout
@@ -130,6 +135,8 @@ CGEvent → WindowServer → frontmost application
         ├── main.swift
         ├── MultitouchTouchSource.swift
         ├── CGMouseController.swift
+        ├── SettingsStore.swift
+        ├── SettingsWindowController.swift
         └── Log.swift
 ```
 

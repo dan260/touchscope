@@ -7,8 +7,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var cgItem: NSMenuItem!
     private var mtItem: NSMenuItem!
     private var accessItem: NSMenuItem!
+    private var gestureItem: NSMenuItem!
     private let cgMouse = CGMouseController()
     private let mtTouch = MultitouchTouchSource()
+    private lazy var settingsWindow = SettingsWindowController()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -32,9 +34,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mtItem.isEnabled = false
         menu.addItem(mtItem)
 
-        let gestureItem = NSMenuItem(title: "3-finger double-tap toggles CG mouse", action: nil, keyEquivalent: "")
+        gestureItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         gestureItem.isEnabled = false
         menu.addItem(gestureItem)
+
+        menu.addItem(.separator())
+        let settingsItem = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
+        settingsItem.target = self
+        settingsItem.keyEquivalentModifierMask = [.command]
+        menu.addItem(settingsItem)
 
         accessItem = NSMenuItem(title: "Grant Accessibility…", action: #selector(openAccessibility), keyEquivalent: "")
         accessItem.target = self
@@ -52,7 +60,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mtTouch.logHandler = { Log.write($0) }
         mtTouch.onThreeFingerDoubleTap = { [weak self] in
             Task { @MainActor in
-                guard let self else { return }
+                guard let self, SettingsStore.shared.threeFingerDoubleTap else { return }
                 self.setCGMouse(!self.cgMouse.isEnabled)
             }
         }
@@ -64,6 +72,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Log.write("Global trackpad listener failed to start")
         }
         refreshStatus()
+        if SettingsStore.shared.startCGMouse {
+            setCGMouse(true)
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -111,6 +122,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let on = cgMouse.isEnabled
         cgItem?.state = on ? .on : .off
         mtItem?.title = mtTouch.isRunning ? "Global trackpad: Ready" : "Global trackpad: Unavailable"
+        gestureItem?.title = SettingsStore.shared.threeFingerDoubleTap
+            ? "3-finger double-tap: On"
+            : "3-finger double-tap: Off"
 
         let trusted = AXIsProcessTrusted()
         accessItem?.title = trusted ? "Accessibility: Granted" : "Grant Accessibility…"
@@ -120,6 +134,10 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             button.image = symbol(on ? "cursorarrow.rays" : "cursorarrow")
             button.toolTip = on ? "TouchScope — CG mouse on" : "TouchScope — CG mouse off"
         }
+    }
+
+    @objc private func openSettings() {
+        settingsWindow.show()
     }
 
     @objc private func openAccessibility() {

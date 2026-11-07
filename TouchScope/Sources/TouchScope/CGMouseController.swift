@@ -31,9 +31,9 @@ final class CGMouseController: @unchecked Sendable {
     private var buttonTimer: Timer?
     private let eventSource = CGEventSource(stateID: .hidSystemState)
 
-    private let smoothingFactor: CGFloat = 0.35
-    private let retouchStickyRadius: CGFloat = 0.012
-    private let clickDragThreshold: CGFloat = 5
+    private var smoothingFactor: CGFloat { CGFloat(SettingsStore.shared.smoothingFactor) }
+    private var retouchStickyRadius: CGFloat { CGFloat(SettingsStore.shared.retouchStickyRadius) }
+    private var clickDragThreshold: CGFloat { CGFloat(SettingsStore.shared.dragThreshold) }
 
     @discardableResult
     func activate() -> Bool {
