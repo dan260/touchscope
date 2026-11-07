@@ -1,0 +1,77 @@
+name: Build and release
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Build app
+        run: |
+          cd TouchScope
+          make app
+          cd ..
+          mkdir -p dist
+          ARCH="$(uname -m)"
+          ASSET="TouchScope-macos-${ARCH}.zip"
+          ditto -c -k --norsrc --noextattr --keepParent TouchScope/.build/app/TouchScope.app "dist/${ASSET}"
+          (cd dist && shasum -a 256 "${ASSET}" > "${ASSET}.sha256")
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TouchScope-${{ github.sha }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Publish rolling latest build
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="Automated build from ${GITHUB_SHA} on ${GITHUB_REF_NAME}."
+          if gh release view latest >/dev/null 2>&1; then
+            gh release edit latest --title "Latest automated build" --notes "$NOTES"
+          else
+            gh release create latest dist/* \
+              --title "Latest automated build" \
+              --notes "$NOTES" \
+              --target "$GITHUB_SHA" \
+              --prerelease
+          fi
+          gh release upload latest dist/* --clobber
+
+      - name: Publish version release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* \
+              --title "TouchScope ${TAG}" \
+              --notes "Automated build of ${TAG} from ${GITHUB_SHA}." \
+              --verify-tag
+          fi

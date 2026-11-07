@@ -60,6 +60,15 @@ ditto .build/app/TouchScope.app /Applications/TouchScope.app
 open /Applications/TouchScope.app
 ```
 
+## Downloads
+
+GitHub Actions builds the app on every push. Downloads are available in [Releases](https://github.com/dan260/touchscope/releases):
+
+- **Latest automated build** — a rolling prerelease updated on every push to `main`; contains `TouchScope-macos-<arch>.zip` and its SHA-256 checksum.
+- **Version releases** — created from `v*` tags and published as normal releases.
+
+Every workflow run also exposes the same zip as a downloadable Actions artifact.
+
 ## First launch
 
 1. After launch, the TouchScope icon appears in the menu bar.
@@ -136,6 +145,7 @@ CGEvent → WindowServer → frontmost application
 
 ```text
 .
+├── .github/workflows/build.yml
 ├── README.md
 ├── LICENSE
 └── TouchScope/
