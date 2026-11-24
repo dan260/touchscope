@@ -14,7 +14,7 @@ struct SettingsView: View {
                 .tabItem { Label("Haptics", systemImage: "waveform") }
         }
         .padding(20)
-        .frame(width: 540, height: 560)
+        .frame(width: 540, height: 580)
     }
 }
 
@@ -115,6 +115,7 @@ private struct HapticsSettingsView: View {
     @AppStorage(SettingsKeys.hapticWindowChange) private var windowChange = SettingsDefaults.hapticWindowChange
     @AppStorage(SettingsKeys.hapticWindowChangeStrength) private var windowChangeStrength = SettingsDefaults.hapticWindowChangeStrength
     @AppStorage(SettingsKeys.hapticBoundary) private var boundary = SettingsDefaults.hapticBoundary
+    @AppStorage(SettingsKeys.hapticScroll) private var scroll = SettingsDefaults.hapticScroll
     @AppStorage(SettingsKeys.hapticDragStart) private var dragStart = SettingsDefaults.hapticDragStart
     @AppStorage(SettingsKeys.hapticDragEnd) private var dragEnd = SettingsDefaults.hapticDragEnd
 
@@ -167,6 +168,7 @@ private struct HapticsSettingsView: View {
                     .disabled(!enabled || !windowChange)
                 }
                 Toggle("Window or screen edge", isOn: $boundary)
+                Toggle("Scroll", isOn: $scroll)
                 Toggle("Drag start", isOn: $dragStart)
                 Toggle("Drag end", isOn: $dragEnd)
             }
@@ -182,6 +184,7 @@ private struct HapticsSettingsView: View {
             windowChange = SettingsDefaults.hapticWindowChange
             windowChangeStrength = SettingsDefaults.hapticWindowChangeStrength
             boundary = SettingsDefaults.hapticBoundary
+            scroll = SettingsDefaults.hapticScroll
             dragStart = SettingsDefaults.hapticDragStart
             dragEnd = SettingsDefaults.hapticDragEnd
         }

@@ -12,6 +12,7 @@ final class HapticFeedbackController {
         case windowExit
         case windowChange
         case boundary
+        case scroll
         case dragStart
         case dragEnd
 
@@ -23,6 +24,7 @@ final class HapticFeedbackController {
             case .windowExit: return 2
             case .windowChange: return 4
             case .boundary: return 5
+            case .scroll: return 1
             case .dragStart: return 2
             case .dragEnd: return 4
             }
@@ -31,7 +33,7 @@ final class HapticFeedbackController {
         var fallback: NSHapticFeedbackManager.FeedbackPattern {
             switch self {
             case .gesture, .dragStart, .dragEnd: return .generic
-            case .fingerCount, .windowExit: return .levelChange
+            case .fingerCount, .windowExit, .scroll: return .levelChange
             case .windowEnter, .windowChange, .boundary: return .alignment
             }
         }
@@ -44,6 +46,7 @@ final class HapticFeedbackController {
             case .windowExit: return SettingsStore.shared.hapticWindowExit
             case .windowChange: return SettingsStore.shared.hapticWindowChange
             case .boundary: return SettingsStore.shared.hapticBoundary
+            case .scroll: return SettingsStore.shared.hapticScroll
             case .dragStart: return SettingsStore.shared.hapticDragStart
             case .dragEnd: return SettingsStore.shared.hapticDragEnd
             }
@@ -104,6 +107,10 @@ final class HapticFeedbackController {
 
     func boundaryReached() {
         fire(.boundary, minInterval: 0.2)
+    }
+
+    func scrolled() {
+        fire(.scroll, minInterval: 0.1)
     }
 
     func dragStarted() {

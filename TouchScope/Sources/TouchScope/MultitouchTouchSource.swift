@@ -46,6 +46,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
     var onTwoThenThreeFingerTap: (() -> Void)?
     var onGestureConfirmed: (() -> Void)?
     var onFingerCountChanged: ((Int) -> Void)?
+    var onScroll: (() -> Void)?
 
     private(set) var isRunning = false
 
@@ -79,6 +80,10 @@ final class MultitouchTouchSource: @unchecked Sendable {
     private var twoFingerStartCentroid: CGPoint = .zero
     private var twoFingerMaxMovement: Double = 0
     private var lastTwoFingerTap: CFTimeInterval = 0
+
+    private var lastScrollCentroid: CGPoint?
+    private var scrollTravel: Double = 0
+    private var lastScrollFire: CFTimeInterval = 0
 
     deinit {
         stop()
@@ -167,6 +172,9 @@ final class MultitouchTouchSource: @unchecked Sendable {
         twoFingerActive = false
         twoFingerEvaluated = false
         lastTwoFingerTap = 0
+        lastScrollCentroid = nil
+        scrollTravel = 0
+        lastScrollFire = 0
         log("started")
         return true
     }
@@ -195,6 +203,9 @@ final class MultitouchTouchSource: @unchecked Sendable {
         twoFingerActive = false
         twoFingerEvaluated = false
         lastTwoFingerTap = 0
+        lastScrollCentroid = nil
+        scrollTravel = 0
+        lastScrollFire = 0
         log("stopped")
     }
 
@@ -206,6 +217,8 @@ final class MultitouchTouchSource: @unchecked Sendable {
         pendingPointerWork?.cancel()
         pendingPointerWork = nil
         pendingContact = false
+        lastScrollCentroid = nil
+        scrollTravel = 0
     }
 
     fileprivate func enqueue(_ fingers: [MTFinger]) {
@@ -236,6 +249,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
             pointerSuppressed = true
         }
 
+        updateTwoFingerScroll(current)
         updateTwoFingerTap(current)
         updateThreeFingerGesture(current, present: present)
 
@@ -309,6 +323,32 @@ final class MultitouchTouchSource: @unchecked Sendable {
         pendingPointerWork?.cancel()
         pendingPointerWork = nil
         pendingContact = false
+    }
+
+    private func updateTwoFingerScroll(_ contacts: [MTFinger]) {
+        guard contacts.count == 2, !gestureActive, onScroll != nil else {
+            lastScrollCentroid = nil
+            scrollTravel = 0
+            return
+        }
+
+        let c = centroid(contacts)
+        guard let previous = lastScrollCentroid else {
+            lastScrollCentroid = c
+            scrollTravel = 0
+            return
+        }
+
+        let step = distance(c, previous)
+        lastScrollCentroid = c
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastScrollFire >= 0.09, step > 0.001 else { return }
+
+        scrollTravel += step
+        guard scrollTravel >= 0.02 else { return }
+        lastScrollFire = now
+        scrollTravel = 0
+        onScroll?()
     }
 
     private func updateTwoFingerTap(_ contacts: [MTFinger]) {

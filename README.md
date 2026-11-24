@@ -18,7 +18,7 @@ It is not a touchscreen emulator and not Direct Touch. The app reads multitouch 
 - Motion smoothing, a sticky retouch zone, and jitter protection.
 - Hardware-like mouse deltas for reliable tracking and Dock interaction.
 - Toggle CG mouse with a three-finger double-tap.
-- Haptic feedback on Force Touch trackpads for confirmed gestures, window mode transitions, finger-count changes, window-to-window moves while dragging a finger (without activating the window), window edges, and drag start/end, with per-event on/off switches and adjustable strength. Window-to-window feedback has its own strength and varies with window depth.
+- Haptic feedback on Force Touch trackpads for confirmed gestures, window mode transitions, finger-count changes, two-finger scrolling, window-to-window moves while dragging a finger (without activating the window), window edges, and drag start/end, with per-event on/off switches and adjustable strength. Window-to-window feedback has its own strength and varies with window depth.
 - Window-to-window feedback includes TouchScope's own settings window and is suppressed while a menu or popup is open.
 - Window mode: lock the pointer to the window under the cursor and outline that window with a configurable color (⌃⌥W, or a two-finger tap followed by a three-finger tap). Switching apps with ⌘Tab moves the lock to the newly active window.
 - Settings window with **General**, **Pointer**, and **Haptics** tabs: launch behavior, gestures, pointer tuning, per-event haptic toggles, haptic strength, and diagnostics.
@@ -87,7 +87,7 @@ If the menu shows **Accessibility: Granted**, permission is already granted. If 
 - **CG mouse** — enable or disable absolute cursor control.
 - **3-finger double-tap toggles CG mouse** — two quick three-finger taps toggle the mode; this works even when CG mouse is off.
 - **Lock to Window (⌃⌥W or two-finger tap then three-finger tap)** — lock the cursor to the window under the pointer and outline it. While locked, ⌘Tab retargets the outline and the cursor to the newly active window. Repeat either activation to unlock. If CG mouse is off, this also enables it.
-- **Settings…** — open the settings window. **General** covers launch behavior, the three-finger gesture, window outline color, Accessibility, and the log; **Pointer** covers smoothing, the sticky retouch zone, and the drag threshold; **Haptics** covers the master switch, global strength, per-event toggles, a separate window-to-window strength, and test buttons.
+- **Settings…** — open the settings window. **General** covers launch behavior, the three-finger gesture, window outline color, Accessibility, and the log; **Pointer** covers smoothing, the sticky retouch zone, and the drag threshold; **Haptics** covers the master switch, global strength, per-event toggles (including scrolling), a separate window-to-window strength, and test buttons.
 - **Accessibility** — permission status and a shortcut to System Settings.
 - **Quit TouchScope** — shut down cleanly and restore the hardware cursor.
 
@@ -123,7 +123,7 @@ CGMouseController
 CGEvent → WindowServer → frontmost application
 ```
 
-- `MultitouchTouchSource` loads the private `MultitouchSupport.framework`, finds the built-in trackpad, reads `MTTouch` frames, and tracks one logical pointer.
+- `MultitouchTouchSource` loads the private `MultitouchSupport.framework`, finds the built-in trackpad, reads `MTTouch` frames, tracks one logical pointer, and recognizes two-finger scroll movement for throttled haptic ticks.
 - `CGMouseController` maps normalized trackpad coordinates to screen coordinates, disassociates the hardware cursor with `CGAssociateMouseAndMouseCursorPosition(0)`, and posts `mouseMoved` / `leftMouseDragged` events.
 - `WindowProbe` checks the CGWindow window under the pointer, including TouchScope's own windows. While a finger is moving, a change of window ID triggers haptic feedback without making the target window active; open menus and popups suppress it, and window z-depth selects a different tap.
 - Physical button state is read with `CGEventSource.buttonState`, so clicks and drag remain system-native; the app only helps position the cursor.
