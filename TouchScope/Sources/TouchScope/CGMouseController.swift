@@ -1,4 +1,5 @@
 import AppKit
+import CoreFoundation
 import CoreGraphics
 import ApplicationServices
 
@@ -15,6 +16,9 @@ import ApplicationServices
 /// is force-killed the cursor can stay disassociated until the next login.
 final class CGMouseController: @unchecked Sendable {
     var logHandler: ((String) -> Void)?
+    var onBoundaryReached: (() -> Void)?
+    var onWindowChanged: ((Int) -> Void)?
+    var onDragStateChanged: ((Bool) -> Void)?
 
     private(set) var isEnabled = false
     private var activeTouch = false
@@ -28,6 +32,9 @@ final class CGMouseController: @unchecked Sendable {
     private var hasLastNormalized = false
     private var dragAnchor: CGPoint?
     private var isDragging = false
+    private var boundaryReached = false
+    private var lastHoverWindowID: CGWindowID?
+    private var lastHoverCheck: CFTimeInterval = 0
     private var buttonTimer: Timer?
     private var lockedWindowBounds: CGRect?
     private let eventSource = CGEventSource(stateID: .hidSystemState)
@@ -55,6 +62,7 @@ final class CGMouseController: @unchecked Sendable {
         screenFrame = screen.frame
         mainScreenMaxY = NSScreen.screens.first?.frame.maxY ?? screen.frame.maxY
         lastPostedPoint = CGPoint(x: cursor.x, y: mainScreenMaxY - cursor.y)
+        resetWindowHover(at: lastPostedPoint)
 
         let err = CGAssociateMouseAndMouseCursorPosition(0)
         guard err == .success else {
@@ -69,6 +77,7 @@ final class CGMouseController: @unchecked Sendable {
         hasLastNormalized = false
         dragAnchor = nil
         isDragging = false
+        boundaryReached = false
         buttonTimer?.invalidate()
         buttonTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             self?.pollButton()
@@ -79,6 +88,7 @@ final class CGMouseController: @unchecked Sendable {
 
     func setLockedWindowBounds(_ bounds: CGRect?) {
         lockedWindowBounds = bounds
+        lastHoverWindowID = nil
     }
 
     func warp(to point: CGPoint) {
@@ -86,7 +96,7 @@ final class CGMouseController: @unchecked Sendable {
         smoothedPoint = point
         lastPoint = point
         hasSmoothedPoint = true
-        postMove(point)
+        postMove(point, allowWindowFeedback: false)
     }
 
     func deactivate() {
@@ -94,7 +104,9 @@ final class CGMouseController: @unchecked Sendable {
         activeTouch = false
         lockedWindowBounds = nil
         dragAnchor = nil
-        isDragging = false
+        setDragging(false)
+        boundaryReached = false
+        lastHoverWindowID = nil
         buttonTimer?.invalidate()
         buttonTimer = nil
         let err = CGAssociateMouseAndMouseCursorPosition(1)
@@ -109,6 +121,7 @@ final class CGMouseController: @unchecked Sendable {
     func handle(multitouchFingerID: Int32, normalized: CGPoint, down: Bool) {
         guard isEnabled else { return }
         let mapped = map(normalized)
+        updateBoundary(normalized)
 
         if down {
             if !activeTouch {
@@ -125,7 +138,7 @@ final class CGMouseController: @unchecked Sendable {
                 hasSmoothedPoint = true
                 lastNormalized = normalized
                 hasLastNormalized = true
-                postMove(point)
+                postMove(point, allowWindowFeedback: false)
             } else {
                 let point = smoothed(mapped)
                 lastPoint = point
@@ -139,7 +152,7 @@ final class CGMouseController: @unchecked Sendable {
             smoothedPoint = point
             lastNormalized = normalized
             hasLastNormalized = true
-            postMove(point)
+            postMove(point, allowWindowFeedback: false)
             activeTouch = false
         }
     }
@@ -173,29 +186,39 @@ final class CGMouseController: @unchecked Sendable {
         )
     }
 
-    private func postMove(_ p: CGPoint) {
+    private func postMove(_ p: CGPoint, allowWindowFeedback: Bool = true) {
         let buttonDown = CGEventSource.buttonState(.combinedSessionState, button: .left)
 
         if buttonDown {
             if dragAnchor == nil {
                 dragAnchor = lastPostedPoint
-                isDragging = false
+                setDragging(false)
             }
             if !isDragging {
                 guard let anchor = dragAnchor,
                       hypot(p.x - anchor.x, p.y - anchor.y) >= clickDragThreshold else {
                     return
                 }
-                isDragging = true
+                setDragging(true)
             }
             if post(.leftMouseDragged, at: p) {
                 lastPostedPoint = p
+                if allowWindowFeedback {
+                    updateWindowHover(at: p)
+                } else {
+                    resetWindowHover(at: p)
+                }
             }
         } else {
             dragAnchor = nil
-            isDragging = false
+            setDragging(false)
             if post(.mouseMoved, at: p) {
                 lastPostedPoint = p
+                if allowWindowFeedback {
+                    updateWindowHover(at: p)
+                } else {
+                    resetWindowHover(at: p)
+                }
             }
         }
     }
@@ -219,8 +242,61 @@ final class CGMouseController: @unchecked Sendable {
     private func pollButton() {
         if !CGEventSource.buttonState(.combinedSessionState, button: .left) {
             dragAnchor = nil
-            isDragging = false
+            setDragging(false)
         }
+    }
+
+    private func setDragging(_ dragging: Bool) {
+        guard isDragging != dragging else { return }
+        isDragging = dragging
+        onDragStateChanged?(dragging)
+    }
+
+    private func updateBoundary(_ point: CGPoint) {
+        let outside = point.x <= 0.015 || point.x >= 0.985 || point.y <= 0.015 || point.y >= 0.985
+        if outside {
+            guard !boundaryReached else { return }
+            boundaryReached = true
+            onBoundaryReached?()
+            return
+        }
+        if point.x > 0.04, point.x < 0.96, point.y > 0.04, point.y < 0.96 {
+            boundaryReached = false
+        }
+    }
+
+    private func resetWindowHover(at point: CGPoint? = nil) {
+        guard SettingsStore.shared.hapticFeedback,
+              SettingsStore.shared.hapticWindowChange,
+              let point else {
+            lastHoverWindowID = nil
+            lastHoverCheck = 0
+            return
+        }
+        lastHoverWindowID = WindowProbe.window(at: point, includeOwnApp: true)?.windowID
+        lastHoverCheck = CFAbsoluteTimeGetCurrent()
+    }
+
+    private func updateWindowHover(at point: CGPoint) {
+        guard lockedWindowBounds == nil else { return }
+        guard SettingsStore.shared.hapticFeedback,
+              SettingsStore.shared.hapticWindowChange else {
+            lastHoverWindowID = nil
+            return
+        }
+
+        let now = CFAbsoluteTimeGetCurrent()
+        guard now - lastHoverCheck >= 0.06 else { return }
+        lastHoverCheck = now
+
+        guard let hit = WindowProbe.window(at: point, includeOwnApp: true) else {
+            lastHoverWindowID = nil
+            return
+        }
+        if let previous = lastHoverWindowID, previous != hit.windowID {
+            onWindowChanged?(hit.depth)
+        }
+        lastHoverWindowID = hit.windowID
     }
 
     private func log(_ s: String) {

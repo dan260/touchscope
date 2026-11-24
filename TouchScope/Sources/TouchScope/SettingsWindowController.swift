@@ -10,9 +10,11 @@ struct SettingsView: View {
                 .tabItem { Label("General", systemImage: "gearshape") }
             PointerSettingsView()
                 .tabItem { Label("Pointer", systemImage: "cursorarrow") }
+            HapticsSettingsView()
+                .tabItem { Label("Haptics", systemImage: "waveform") }
         }
         .padding(20)
-        .frame(width: 540, height: 430)
+        .frame(width: 540, height: 560)
     }
 }
 
@@ -103,6 +105,89 @@ private struct GeneralSettingsView: View {
     }
 }
 
+private struct HapticsSettingsView: View {
+    @AppStorage(SettingsKeys.hapticFeedback) private var enabled = SettingsDefaults.hapticFeedback
+    @AppStorage(SettingsKeys.hapticStrength) private var strength = SettingsDefaults.hapticStrength
+    @AppStorage(SettingsKeys.hapticGesture) private var gesture = SettingsDefaults.hapticGesture
+    @AppStorage(SettingsKeys.hapticFingerCount) private var fingerCount = SettingsDefaults.hapticFingerCount
+    @AppStorage(SettingsKeys.hapticWindowEnter) private var windowEnter = SettingsDefaults.hapticWindowEnter
+    @AppStorage(SettingsKeys.hapticWindowExit) private var windowExit = SettingsDefaults.hapticWindowExit
+    @AppStorage(SettingsKeys.hapticWindowChange) private var windowChange = SettingsDefaults.hapticWindowChange
+    @AppStorage(SettingsKeys.hapticWindowChangeStrength) private var windowChangeStrength = SettingsDefaults.hapticWindowChangeStrength
+    @AppStorage(SettingsKeys.hapticBoundary) private var boundary = SettingsDefaults.hapticBoundary
+    @AppStorage(SettingsKeys.hapticDragStart) private var dragStart = SettingsDefaults.hapticDragStart
+    @AppStorage(SettingsKeys.hapticDragEnd) private var dragEnd = SettingsDefaults.hapticDragEnd
+
+    var body: some View {
+        Form {
+            Section("Feedback") {
+                Toggle("Enable haptic feedback", isOn: $enabled)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack {
+                        Text("Strength")
+                        Spacer()
+                        Text("\(Int((strength * 100).rounded()))%")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(value: $strength, in: 0.1...1.0, step: 0.05)
+                        .disabled(!enabled)
+                    Text("Strength uses the Force Touch actuator. If MultitouchSupport is unavailable, fixed AppKit taps are used instead.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Button("Test feedback") {
+                    HapticFeedbackController.shared.preview()
+                }
+                .disabled(!enabled)
+            }
+
+            Section("Events") {
+                Toggle("Gesture confirmation", isOn: $gesture)
+                Toggle("Finger count change", isOn: $fingerCount)
+                Toggle("Window mode on", isOn: $windowEnter)
+                Toggle("Window mode off", isOn: $windowExit)
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Window-to-window move", isOn: $windowChange)
+                    HStack {
+                        Text("Window-to-window strength")
+                        Spacer()
+                        Text("\(Int((windowChangeStrength * 100).rounded()))%")
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(value: $windowChangeStrength, in: 0.1...1.0, step: 0.05)
+                        .disabled(!enabled || !windowChange)
+                    Text("Deeper windows use a different tap and a little more strength.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Test window-to-window") {
+                        HapticFeedbackController.shared.previewWindowChange()
+                    }
+                    .disabled(!enabled || !windowChange)
+                }
+                Toggle("Window or screen edge", isOn: $boundary)
+                Toggle("Drag start", isOn: $dragStart)
+                Toggle("Drag end", isOn: $dragEnd)
+            }
+        }
+        .formStyle(.grouped)
+        .onReceive(NotificationCenter.default.publisher(for: .touchScopeSettingsReset)) { _ in
+            enabled = SettingsDefaults.hapticFeedback
+            strength = SettingsDefaults.hapticStrength
+            gesture = SettingsDefaults.hapticGesture
+            fingerCount = SettingsDefaults.hapticFingerCount
+            windowEnter = SettingsDefaults.hapticWindowEnter
+            windowExit = SettingsDefaults.hapticWindowExit
+            windowChange = SettingsDefaults.hapticWindowChange
+            windowChangeStrength = SettingsDefaults.hapticWindowChangeStrength
+            boundary = SettingsDefaults.hapticBoundary
+            dragStart = SettingsDefaults.hapticDragStart
+            dragEnd = SettingsDefaults.hapticDragEnd
+        }
+    }
+}
+
 private struct PointerSettingsView: View {
     @AppStorage(SettingsKeys.smoothingFactor) private var smoothing = SettingsDefaults.smoothingFactor
     @AppStorage(SettingsKeys.retouchStickyRadius) private var stickyRadius = SettingsDefaults.retouchStickyRadius
@@ -173,7 +258,7 @@ final class SettingsWindowController: NSWindowController {
         window.title = "TouchScope Settings"
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 540, height: 430))
+        window.setContentSize(NSSize(width: 540, height: 520))
         window.center()
         window.setFrameAutosaveName("TouchScopeSettings")
         super.init(window: window)

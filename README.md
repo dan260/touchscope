@@ -18,8 +18,10 @@ It is not a touchscreen emulator and not Direct Touch. The app reads multitouch 
 - Motion smoothing, a sticky retouch zone, and jitter protection.
 - Hardware-like mouse deltas for reliable tracking and Dock interaction.
 - Toggle CG mouse with a three-finger double-tap.
+- Haptic feedback on Force Touch trackpads for confirmed gestures, window mode transitions, finger-count changes, window-to-window moves while dragging a finger (without activating the window), window edges, and drag start/end, with per-event on/off switches and adjustable strength. Window-to-window feedback has its own strength and varies with window depth.
+- Window-to-window feedback includes TouchScope's own settings window and is suppressed while a menu or popup is open.
 - Window mode: lock the pointer to the window under the cursor and outline that window with a configurable color (⌃⌥W, or a two-finger tap followed by a three-finger tap). Switching apps with ⌘Tab moves the lock to the newly active window.
-- Settings window with **General** and **Pointer** tabs: launch behavior, gesture toggle, smoothing, sticky zone, drag threshold, and diagnostics.
+- Settings window with **General**, **Pointer**, and **Haptics** tabs: launch behavior, gestures, pointer tuning, per-event haptic toggles, haptic strength, and diagnostics.
 - Menu bar-only: no Dock icon; settings open in a compact window.
 - Local log at `~/touchscope.log`; no network access or telemetry.
 
@@ -85,7 +87,7 @@ If the menu shows **Accessibility: Granted**, permission is already granted. If 
 - **CG mouse** — enable or disable absolute cursor control.
 - **3-finger double-tap toggles CG mouse** — two quick three-finger taps toggle the mode; this works even when CG mouse is off.
 - **Lock to Window (⌃⌥W or two-finger tap then three-finger tap)** — lock the cursor to the window under the pointer and outline it. While locked, ⌘Tab retargets the outline and the cursor to the newly active window. Repeat either activation to unlock. If CG mouse is off, this also enables it.
-- **Settings…** — open the settings window. **General** covers launch behavior, the three-finger gesture, window outline color, Accessibility, and the log; **Pointer** covers smoothing, the sticky retouch zone, and the drag threshold.
+- **Settings…** — open the settings window. **General** covers launch behavior, the three-finger gesture, window outline color, Accessibility, and the log; **Pointer** covers smoothing, the sticky retouch zone, and the drag threshold; **Haptics** covers the master switch, global strength, per-event toggles, a separate window-to-window strength, and test buttons.
 - **Accessibility** — permission status and a shortcut to System Settings.
 - **Quit TouchScope** — shut down cleanly and restore the hardware cursor.
 
@@ -123,11 +125,14 @@ CGEvent → WindowServer → frontmost application
 
 - `MultitouchTouchSource` loads the private `MultitouchSupport.framework`, finds the built-in trackpad, reads `MTTouch` frames, and tracks one logical pointer.
 - `CGMouseController` maps normalized trackpad coordinates to screen coordinates, disassociates the hardware cursor with `CGAssociateMouseAndMouseCursorPosition(0)`, and posts `mouseMoved` / `leftMouseDragged` events.
+- `WindowProbe` checks the CGWindow window under the pointer, including TouchScope's own windows. While a finger is moving, a change of window ID triggers haptic feedback without making the target window active; open menus and popups suppress it, and window z-depth selects a different tap.
 - Physical button state is read with `CGEventSource.buttonState`, so clicks and drag remain system-native; the app only helps position the cursor.
 - `main.swift` creates the menu bar item and connects the trackpad to the cursor controller.
+- `HapticFeedbackController.swift` maps feedback events to Force Touch waveforms, applies the configured strength, and respects the per-event toggles.
+- `MultitouchHapticActuator.swift` drives the Force Touch actuator through private `MTActuatorActuate` calls. If the actuator is unavailable, the controller falls back to AppKit's three fixed patterns.
 - `WindowLockController.swift` finds the window under the pointer, tracks its bounds, and draws the colored outline; `CGMouseController` maps touches to that window instead of the whole screen.
 - `GlobalHotKey.swift` registers the global ⌃⌥W shortcut with Carbon.
-- `SettingsStore.swift` persists pointer, gesture, and window-outline settings in `UserDefaults`.
+- `SettingsStore.swift` persists pointer, gesture, haptic, and window-outline settings in `UserDefaults`.
 - `SettingsWindowController.swift` hosts the SwiftUI settings tabs.
 - `Log.swift` writes a minimal log to `~/touchscope.log`.
 
@@ -139,6 +144,8 @@ CGEvent → WindowServer → frontmost application
 - **Not Direct Touch.** The app does not deliver `NSTouch` to other applications and does not create a virtual touchscreen. A real touchscreen requires the `com.apple.developer.hid.virtual.device` entitlement, which is not available in ordinary provisioning profiles.
 - **Fixed window-mode shortcut.** ⌃⌥W is built in; there is no shortcut editor. Pointer tuning is available in **Settings…**, but there is still no per-app configuration or custom gesture editor.
 - **No pressure or area editor.** Pressure is not exposed, and there is no trackpad area editor.
+- **Window hover uses bounds and z-order.** Window-to-window feedback compares CGWindow bounds and stacking order, not accessibility hit-test results, so unusual transparent or layered windows and depth levels may be approximated.
+- **Haptics depend on private APIs.** Global and window-to-window strength use private Force Touch actuator calls and may change with macOS updates. Without the actuator, TouchScope falls back to three fixed AppKit patterns with no strength control; depth still changes the pattern. Feedback is felt only while a finger touches the trackpad.
 - **No notarization.** When moved to another Mac, Gatekeeper may require opening the app via the context menu → **Open**.
 
 ## Project layout
@@ -158,6 +165,8 @@ CGEvent → WindowServer → frontmost application
         ├── main.swift
         ├── MultitouchTouchSource.swift
         ├── CGMouseController.swift
+        ├── HapticFeedbackController.swift
+        ├── MultitouchHapticActuator.swift
         ├── WindowLockController.swift
         ├── GlobalHotKey.swift
         ├── ColorHex.swift

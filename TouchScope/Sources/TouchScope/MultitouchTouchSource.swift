@@ -44,6 +44,8 @@ final class MultitouchTouchSource: @unchecked Sendable {
     var onTouch: ((Int32, CGPoint, Bool) -> Void)?
     var onThreeFingerDoubleTap: (() -> Void)?
     var onTwoThenThreeFingerTap: (() -> Void)?
+    var onGestureConfirmed: (() -> Void)?
+    var onFingerCountChanged: ((Int) -> Void)?
 
     private(set) var isRunning = false
 
@@ -63,6 +65,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
     private var pendingPoint: CGPoint = .zero
     private var pendingContact = false
 
+    private var lastFingerCount = 0
     private var gestureActive = false
     private var gestureEvaluated = false
     private var threeFingerStart: CFTimeInterval = 0
@@ -157,6 +160,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
         pendingPointerWork?.cancel()
         pendingPointerWork = nil
         pendingContact = false
+        lastFingerCount = 0
         gestureActive = false
         gestureEvaluated = false
         lastThreeFingerTap = 0
@@ -184,6 +188,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
         pendingPointerWork?.cancel()
         pendingPointerWork = nil
         pendingContact = false
+        lastFingerCount = 0
         gestureActive = false
         gestureEvaluated = false
         lastThreeFingerTap = 0
@@ -214,6 +219,10 @@ final class MultitouchTouchSource: @unchecked Sendable {
 
         let current = fingers.filter { $0.state == 3 || $0.state == 4 }
         let present = fingers.filter { $0.state == 1 || $0.state == 3 || $0.state == 4 }
+        if current.count != lastFingerCount {
+            lastFingerCount = current.count
+            onFingerCountChanged?(current.count)
+        }
         if onTouch == nil {
             cancelPointer()
         }
@@ -361,10 +370,12 @@ final class MultitouchTouchSource: @unchecked Sendable {
                     if now - lastTwoFingerTap < 1.0 {
                         lastTwoFingerTap = 0
                         lastThreeFingerTap = 0
+                        onGestureConfirmed?()
                         onTwoThenThreeFingerTap?()
                     } else if now - lastThreeFingerTap < 1.5 {
                         lastThreeFingerTap = 0
                         lastTwoFingerTap = 0
+                        onGestureConfirmed?()
                         onThreeFingerDoubleTap?()
                     } else {
                         lastThreeFingerTap = now

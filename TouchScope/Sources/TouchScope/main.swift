@@ -13,6 +13,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let mtTouch = MultitouchTouchSource()
     private let windowLock = WindowLockController()
     private let windowHotKey = GlobalHotKey()
+    private let haptics = HapticFeedbackController.shared
     private lazy var settingsWindow = SettingsWindowController()
     private var retargetTask: Task<Void, Never>?
 
@@ -66,6 +67,27 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Log.reset()
         cgMouse.logHandler = { Log.write("[CG] \($0)") }
         mtTouch.logHandler = { Log.write($0) }
+        mtTouch.onGestureConfirmed = { [weak self] in
+            Task { @MainActor in self?.haptics.gestureConfirmed() }
+        }
+        mtTouch.onFingerCountChanged = { [weak self] _ in
+            Task { @MainActor in self?.haptics.fingerCountChanged() }
+        }
+        cgMouse.onBoundaryReached = { [weak self] in
+            Task { @MainActor in self?.haptics.boundaryReached() }
+        }
+        cgMouse.onWindowChanged = { [weak self] depth in
+            Task { @MainActor in self?.haptics.windowChanged(depth: depth) }
+        }
+        cgMouse.onDragStateChanged = { [weak self] dragging in
+            Task { @MainActor in
+                if dragging {
+                    self?.haptics.dragStarted()
+                } else {
+                    self?.haptics.dragEnded()
+                }
+            }
+        }
         mtTouch.onThreeFingerDoubleTap = { [weak self] in
             Task { @MainActor in
                 guard let self, SettingsStore.shared.threeFingerDoubleTap else { return }
@@ -175,7 +197,7 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return
             }
         } else {
-            windowLock.unlock()
+            unlockWindowMode()
             mtTouch.onTouch = nil
             mtTouch.cancelPointer()
             cgMouse.deactivate()
@@ -183,9 +205,15 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         refreshStatus()
     }
 
+    private func unlockWindowMode() {
+        guard windowLock.isActive else { return }
+        windowLock.unlock()
+        haptics.windowModeExited()
+    }
+
     @objc private func toggleWindowLock() {
         if windowLock.isActive {
-            windowLock.unlock()
+            unlockWindowMode()
             refreshStatus()
             return
         }
@@ -200,7 +228,9 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
-        if !windowLock.lock(at: cursor) {
+        if windowLock.lock(at: cursor) {
+            haptics.windowModeEntered()
+        } else {
             Log.write("[WL] no window under cursor")
             NSSound.beep()
         }

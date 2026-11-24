@@ -1,5 +1,89 @@
 import AppKit
 
+struct WindowHit {
+    let windowID: CGWindowID
+    let ownerPID: pid_t
+    let bounds: CGRect
+    let depth: Int
+}
+
+enum WindowProbe {
+    static let excludedOwners: Set<String> = [
+        "Window Server",
+        "Dock",
+        "Control Center",
+        "Notification Center",
+        "TextInputMenuAgent",
+    ]
+
+    static func window(at point: CGPoint, includeOwnApp: Bool = false) -> WindowHit? {
+        guard let windows = windowList(), !hasOverlay(in: windows) else { return nil }
+        let ownPID = getpid()
+        var depth = 0
+
+        for info in windows {
+            guard let layer = info[kCGWindowLayer as String] as? NSNumber,
+                  (0...20).contains(layer.intValue) else {
+                continue
+            }
+            guard let alpha = info[kCGWindowAlpha as String] as? NSNumber, alpha.doubleValue > 0 else {
+                continue
+            }
+            guard let pidNumber = info[kCGWindowOwnerPID as String] as? NSNumber else {
+                continue
+            }
+            let pid = pid_t(pidNumber.int32Value)
+            guard includeOwnApp || pid != ownPID else { continue }
+            guard let owner = info[kCGWindowOwnerName as String] as? String,
+                  !excludedOwners.contains(owner) else {
+                continue
+            }
+            guard let windowIDNumber = info[kCGWindowNumber as String] as? NSNumber,
+                  let bounds = bounds(from: info) else {
+                continue
+            }
+
+            depth += 1
+            guard bounds.width > 40, bounds.height > 40, bounds.contains(point) else {
+                continue
+            }
+            return WindowHit(
+                windowID: CGWindowID(windowIDNumber.uint32Value),
+                ownerPID: pid,
+                bounds: bounds,
+                depth: depth - 1
+            )
+        }
+        return nil
+    }
+
+    static func hasOverlay(in windows: [[String: Any]]? = nil) -> Bool {
+        let windows = windows ?? windowList() ?? []
+        return windows.contains { info in
+            guard let layer = info[kCGWindowLayer as String] as? NSNumber,
+                  (101...102).contains(layer.intValue) else {
+                return false
+            }
+            guard let alpha = info[kCGWindowAlpha as String] as? NSNumber else {
+                return false
+            }
+            return alpha.doubleValue > 0
+        }
+    }
+
+    static func windowList() -> [[String: Any]]? {
+        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+        return CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
+    }
+
+    static func bounds(from info: [String: Any]) -> CGRect? {
+        guard let dict = info[kCGWindowBounds as String] as? NSDictionary else {
+            return nil
+        }
+        return CGRect(dictionaryRepresentation: dict)
+    }
+}
+
 struct LockedWindow {
     let windowID: CGWindowID
     let ownerPID: pid_t
@@ -17,15 +101,6 @@ final class WindowLockController {
     private var refreshTimer: Timer?
     private let outlineView = WindowOutlineView()
     private let outlineWindow: WindowOutlineWindow
-
-    private let excludedOwners: Set<String> = [
-        "Window Server",
-        "Dock",
-        "Control Center",
-        "Notification Center",
-        "TextInputMenuAgent",
-        "TouchScope",
-    ]
 
     init() {
         outlineWindow = WindowOutlineWindow()
@@ -123,43 +198,12 @@ final class WindowLockController {
     }
 
     private func findWindow(at point: CGPoint) -> LockedWindow? {
-        guard let windows = windowList() else { return nil }
-        let ownPID = getpid()
-
-        for info in windows {
-            guard let layer = info[kCGWindowLayer as String] as? NSNumber, layer.intValue == 0 else {
-                continue
-            }
-            guard let alpha = info[kCGWindowAlpha as String] as? NSNumber, alpha.doubleValue > 0 else {
-                continue
-            }
-            guard let pidNumber = info[kCGWindowOwnerPID as String] as? NSNumber else {
-                continue
-            }
-            let pid = pid_t(pidNumber.int32Value)
-            guard pid != ownPID else { continue }
-            guard let owner = info[kCGWindowOwnerName as String] as? String,
-                  !excludedOwners.contains(owner) else {
-                continue
-            }
-            guard let windowIDNumber = info[kCGWindowNumber as String] as? NSNumber,
-                  let bounds = bounds(from: info) else {
-                continue
-            }
-            guard bounds.width > 40, bounds.height > 40, bounds.contains(point) else {
-                continue
-            }
-            return LockedWindow(
-                windowID: CGWindowID(windowIDNumber.uint32Value),
-                ownerPID: pid,
-                bounds: bounds
-            )
-        }
-        return nil
+        guard let hit = WindowProbe.window(at: point) else { return nil }
+        return LockedWindow(windowID: hit.windowID, ownerPID: hit.ownerPID, bounds: hit.bounds)
     }
 
     private func findFrontmostWindow(ofPID pid: pid_t) -> LockedWindow? {
-        guard let windows = windowList() else { return nil }
+        guard let windows = WindowProbe.windowList() else { return nil }
 
         for info in windows {
             guard let layer = info[kCGWindowLayer as String] as? NSNumber, layer.intValue == 0 else {
@@ -173,11 +217,11 @@ final class WindowLockController {
                 continue
             }
             guard let owner = info[kCGWindowOwnerName as String] as? String,
-                  !excludedOwners.contains(owner) else {
+                  !WindowProbe.excludedOwners.contains(owner) else {
                 continue
             }
             guard let windowIDNumber = info[kCGWindowNumber as String] as? NSNumber,
-                  let bounds = bounds(from: info),
+                  let bounds = WindowProbe.bounds(from: info),
                   bounds.width > 40, bounds.height > 40 else {
                 continue
             }
@@ -191,13 +235,13 @@ final class WindowLockController {
     }
 
     private func findWindow(id: CGWindowID) -> LockedWindow? {
-        guard let windows = windowList() else { return nil }
+        guard let windows = WindowProbe.windowList() else { return nil }
 
         for info in windows {
             guard let windowIDNumber = info[kCGWindowNumber as String] as? NSNumber,
                   windowIDNumber.uint32Value == id,
                   let pidNumber = info[kCGWindowOwnerPID as String] as? NSNumber,
-                  let bounds = bounds(from: info) else {
+                  let bounds = WindowProbe.bounds(from: info) else {
                 continue
             }
             return LockedWindow(
@@ -207,18 +251,6 @@ final class WindowLockController {
             )
         }
         return nil
-    }
-
-    private func windowList() -> [[String: Any]]? {
-        let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
-        return CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]]
-    }
-
-    private func bounds(from info: [String: Any]) -> CGRect? {
-        guard let dict = info[kCGWindowBounds as String] as? NSDictionary else {
-            return nil
-        }
-        return CGRect(dictionaryRepresentation: dict)
     }
 }
 
