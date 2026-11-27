@@ -116,6 +116,7 @@ private struct HapticsSettingsView: View {
     @AppStorage(SettingsKeys.hapticWindowChangeStrength) private var windowChangeStrength = SettingsDefaults.hapticWindowChangeStrength
     @AppStorage(SettingsKeys.hapticBoundary) private var boundary = SettingsDefaults.hapticBoundary
     @AppStorage(SettingsKeys.hapticScroll) private var scroll = SettingsDefaults.hapticScroll
+    @AppStorage(SettingsKeys.hapticScrollInertia) private var scrollInertia = SettingsDefaults.hapticScrollInertia
     @AppStorage(SettingsKeys.hapticDragStart) private var dragStart = SettingsDefaults.hapticDragStart
     @AppStorage(SettingsKeys.hapticDragEnd) private var dragEnd = SettingsDefaults.hapticDragEnd
 
@@ -168,7 +169,21 @@ private struct HapticsSettingsView: View {
                     .disabled(!enabled || !windowChange)
                 }
                 Toggle("Window or screen edge", isOn: $boundary)
-                Toggle("Scroll", isOn: $scroll)
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle("Scroll", isOn: $scroll)
+                    HStack {
+                        Text("Scroll inertia length")
+                        Spacer()
+                        Text(String(format: "%.2f s", scrollInertia))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    Slider(value: $scrollInertia, in: 0.1...0.8, step: 0.05)
+                        .disabled(!enabled || !scroll)
+                    Text("Fading ticks after two-finger scrolling stops.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Toggle("Drag start", isOn: $dragStart)
                 Toggle("Drag end", isOn: $dragEnd)
             }
@@ -185,6 +200,7 @@ private struct HapticsSettingsView: View {
             windowChangeStrength = SettingsDefaults.hapticWindowChangeStrength
             boundary = SettingsDefaults.hapticBoundary
             scroll = SettingsDefaults.hapticScroll
+            scrollInertia = SettingsDefaults.hapticScrollInertia
             dragStart = SettingsDefaults.hapticDragStart
             dragEnd = SettingsDefaults.hapticDragEnd
         }

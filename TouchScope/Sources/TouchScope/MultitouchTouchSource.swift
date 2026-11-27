@@ -46,7 +46,7 @@ final class MultitouchTouchSource: @unchecked Sendable {
     var onTwoThenThreeFingerTap: (() -> Void)?
     var onGestureConfirmed: (() -> Void)?
     var onFingerCountChanged: ((Int) -> Void)?
-    var onScroll: (() -> Void)?
+    var onScroll: ((Double) -> Void)?
 
     private(set) var isRunning = false
 
@@ -84,6 +84,14 @@ final class MultitouchTouchSource: @unchecked Sendable {
     private var lastScrollCentroid: CGPoint?
     private var scrollTravel: Double = 0
     private var lastScrollFire: CFTimeInterval = 0
+    private var scrollActive = false
+    private var didScroll = false
+    private var lastScrollSample: CFTimeInterval = 0
+    private var scrollVelocity: Double = 0
+    private var inertiaStartIntensity: Double = 0
+    private var inertiaStartedAt: CFTimeInterval = 0
+    private var inertiaDuration: Double = 0
+    private var inertiaTimer: Timer?
 
     deinit {
         stop()
@@ -172,9 +180,14 @@ final class MultitouchTouchSource: @unchecked Sendable {
         twoFingerActive = false
         twoFingerEvaluated = false
         lastTwoFingerTap = 0
+        cancelInertia()
         lastScrollCentroid = nil
         scrollTravel = 0
         lastScrollFire = 0
+        scrollActive = false
+        didScroll = false
+        lastScrollSample = 0
+        scrollVelocity = 0
         log("started")
         return true
     }
@@ -203,9 +216,14 @@ final class MultitouchTouchSource: @unchecked Sendable {
         twoFingerActive = false
         twoFingerEvaluated = false
         lastTwoFingerTap = 0
+        cancelInertia()
         lastScrollCentroid = nil
         scrollTravel = 0
         lastScrollFire = 0
+        scrollActive = false
+        didScroll = false
+        lastScrollSample = 0
+        scrollVelocity = 0
         log("stopped")
     }
 
@@ -217,8 +235,13 @@ final class MultitouchTouchSource: @unchecked Sendable {
         pendingPointerWork?.cancel()
         pendingPointerWork = nil
         pendingContact = false
+        cancelInertia()
         lastScrollCentroid = nil
         scrollTravel = 0
+        scrollActive = false
+        didScroll = false
+        lastScrollSample = 0
+        scrollVelocity = 0
     }
 
     fileprivate func enqueue(_ fingers: [MTFinger]) {
@@ -326,29 +349,105 @@ final class MultitouchTouchSource: @unchecked Sendable {
     }
 
     private func updateTwoFingerScroll(_ contacts: [MTFinger]) {
+        let now = CFAbsoluteTimeGetCurrent()
         guard contacts.count == 2, !gestureActive, onScroll != nil else {
-            lastScrollCentroid = nil
-            scrollTravel = 0
+            if gestureActive {
+                cancelInertia()
+                scrollActive = false
+                didScroll = false
+                lastScrollCentroid = nil
+                scrollTravel = 0
+            } else {
+                finishScroll(now: now)
+            }
             return
+        }
+
+        if !scrollActive {
+            cancelInertia()
+            scrollActive = true
+            didScroll = false
+            scrollVelocity = 0
+            lastScrollFire = 0
+            lastScrollSample = now
         }
 
         let c = centroid(contacts)
         guard let previous = lastScrollCentroid else {
             lastScrollCentroid = c
+            lastScrollSample = now
             scrollTravel = 0
             return
         }
 
         let step = distance(c, previous)
+        let dt = max(now - lastScrollSample, 0.001)
         lastScrollCentroid = c
-        let now = CFAbsoluteTimeGetCurrent()
+        lastScrollSample = now
+        if step > 0.001 {
+            let instant = min(step / dt, 3.0)
+            scrollVelocity = scrollVelocity == 0 ? instant : scrollVelocity * 0.7 + instant * 0.3
+        } else {
+            scrollVelocity *= exp(-dt / 0.12)
+        }
         guard now - lastScrollFire >= 0.09, step > 0.001 else { return }
 
         scrollTravel += step
         guard scrollTravel >= 0.02 else { return }
         lastScrollFire = now
         scrollTravel = 0
-        onScroll?()
+        didScroll = true
+        onScroll?(min(1, max(0.35, scrollVelocity / 1.2)))
+    }
+
+    private func finishScroll(now: CFTimeInterval) {
+        guard scrollActive else { return }
+        scrollActive = false
+        lastScrollCentroid = nil
+        scrollTravel = 0
+        let velocity = scrollVelocity
+        let shouldStart = didScroll && velocity > 0.08
+        didScroll = false
+        guard shouldStart else { return }
+        inertiaStartIntensity = min(1, velocity / 1.2)
+        inertiaDuration = max(0.05, SettingsStore.shared.hapticScrollInertia)
+        inertiaStartedAt = now
+        startInertiaTimer()
+    }
+
+    private func startInertiaTimer() {
+        inertiaTimer?.invalidate()
+        let interval = min(0.06, max(0.03, inertiaDuration / 6))
+        let timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            self?.tickInertia()
+        }
+        inertiaTimer = timer
+    }
+
+    private func tickInertia() {
+        guard isRunning, inertiaDuration > 0 else {
+            cancelInertia()
+            return
+        }
+        let elapsed = CFAbsoluteTimeGetCurrent() - inertiaStartedAt
+        guard elapsed >= 0, elapsed < inertiaDuration else {
+            cancelInertia()
+            return
+        }
+        let intensity = inertiaStartIntensity * (1 - elapsed / inertiaDuration)
+        guard intensity > 0.08 else {
+            cancelInertia()
+            return
+        }
+        onScroll?(intensity)
+    }
+
+    private func cancelInertia() {
+        inertiaTimer?.invalidate()
+        inertiaTimer = nil
+        inertiaStartIntensity = 0
+        inertiaStartedAt = 0
+        inertiaDuration = 0
     }
 
     private func updateTwoFingerTap(_ contacts: [MTFinger]) {

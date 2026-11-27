@@ -73,8 +73,8 @@ final class AppController: NSObject, NSApplicationDelegate, NSMenuDelegate {
         mtTouch.onFingerCountChanged = { [weak self] _ in
             Task { @MainActor in self?.haptics.fingerCountChanged() }
         }
-        mtTouch.onScroll = { [weak self] in
-            Task { @MainActor in self?.haptics.scrolled() }
+        mtTouch.onScroll = { [weak self] intensity in
+            Task { @MainActor in self?.haptics.scrolled(intensity: intensity) }
         }
         cgMouse.onBoundaryReached = { [weak self] in
             Task { @MainActor in self?.haptics.boundaryReached() }

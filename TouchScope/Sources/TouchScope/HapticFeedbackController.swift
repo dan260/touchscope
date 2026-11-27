@@ -109,8 +109,9 @@ final class HapticFeedbackController {
         fire(.boundary, minInterval: 0.2)
     }
 
-    func scrolled() {
-        fire(.scroll, minInterval: 0.1)
+    func scrolled(intensity: Double) {
+        let strength = SettingsStore.shared.hapticStrength * max(0, min(1, intensity))
+        fire(.scroll, minInterval: 0.05, strength: strength)
     }
 
     func dragStarted() {

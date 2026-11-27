@@ -20,6 +20,7 @@ enum SettingsKeys {
     static let hapticWindowChangeStrength = "hapticWindowChangeStrength"
     static let hapticBoundary = "hapticBoundary"
     static let hapticScroll = "hapticScroll"
+    static let hapticScrollInertia = "hapticScrollInertia"
     static let hapticDragStart = "hapticDragStart"
     static let hapticDragEnd = "hapticDragEnd"
     static let startCGMouse = "startCGMouse"
@@ -41,6 +42,7 @@ enum SettingsDefaults {
     static let hapticWindowChangeStrength = 0.7
     static let hapticBoundary = true
     static let hapticScroll = true
+    static let hapticScrollInertia = 0.3
     static let hapticDragStart = true
     static let hapticDragEnd = true
     static let startCGMouse = false
@@ -122,6 +124,11 @@ final class SettingsStore: @unchecked Sendable {
         set { defaults.set(newValue, forKey: SettingsKeys.hapticScroll) }
     }
 
+    var hapticScrollInertia: Double {
+        get { defaults.object(forKey: SettingsKeys.hapticScrollInertia) as? Double ?? SettingsDefaults.hapticScrollInertia }
+        set { defaults.set(newValue, forKey: SettingsKeys.hapticScrollInertia) }
+    }
+
     var hapticDragStart: Bool {
         get { defaults.object(forKey: SettingsKeys.hapticDragStart) as? Bool ?? SettingsDefaults.hapticDragStart }
         set { defaults.set(newValue, forKey: SettingsKeys.hapticDragStart) }
@@ -162,6 +169,7 @@ final class SettingsStore: @unchecked Sendable {
             SettingsKeys.hapticWindowChangeStrength,
             SettingsKeys.hapticBoundary,
             SettingsKeys.hapticScroll,
+            SettingsKeys.hapticScrollInertia,
             SettingsKeys.hapticDragStart,
             SettingsKeys.hapticDragEnd,
             SettingsKeys.startCGMouse,
